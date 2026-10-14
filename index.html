@@ -1,45 +1,189 @@
-[index.html](https://github.com/user-attachments/files/33413258/index.html)
-# sense64.github.io<!DOCTYPE html>
+html_content = """<!DOCTYPE html>
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>나의 자기소개 페이지</title>
-    <link rel="stylesheet" href="style.css">
+    <title>지점별 매출 분석 대시보드</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Chart.js Boxplot Plugin -->
+    <script src="https://cdn.jsdelivr.net/npm/@sgratzl/chartjs-chart-boxplot@4.2.4/build/index.umd.min.js"></script>
+    <!-- PapaParse (CSV Parsing) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
 </head>
-<body>
-    <div class="card">
-        <!-- 프로필 이미지 -->
-        <img src="profile.jpg" alt="프로필 사진" class="profile-img">
-        
-        <!-- 이름 및 직함 -->
-        <h1>홍길동</h1>
-        <p class="subtitle">프론트엔드 개발자 지망생</p>
-        
-        <hr>
+<body class="bg-gray-100 font-sans">
 
-        <!-- 기본 정보 -->
-        <div class="info-section">
-            <h2>About Me</h2>
-            <ul>
-                <li><strong>생년월일:</strong> 1999.01.01</li>
-                <li><strong>MBTI:</strong> INFP</li>
-                <li><strong>연락처:</strong> 010-1234-5678</li>
-                <li><strong>이메일:</strong> example@email.com</li>
-            </ul>
+    <div class="container mx-auto px-4 py-8">
+        <!-- 헤더 -->
+        <header class="mb-8 text-center">
+            <h1 class="text-3xl font-bold text-gray-800">실시간 지점별 매출액 대시보드</h1>
+            <p class="text-gray-600 mt-2">GitHub Pages를 통한 서버리스 분석 플랫폼</p>
+        </header>
+
+        <!-- 지점 선택 및 설정 구역 -->
+        <div class="bg-white rounded-lg shadow-md p-6 mb-8 flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div>
+                <label for="branchSelect" class="block text-sm font-medium text-gray-700 mb-1">분석할 지점 선택</label>
+                <select id="branchSelect" class="block w-64 p-2.5 bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500">
+                    <!-- JavaScript로 동적 로드 -->
+                </select>
+            </div>
+            <div class="text-sm text-gray-500">
+                데이터 소스: <span class="font-mono bg-gray-100 px-2 py-1 rounded text-red-600">data.csv</span>
+            </div>
         </div>
 
-        <!-- 취미 및 관심사 -->
-        <div class="info-section">
-            <h2>Hobby & Interests</h2>
-            <p>독서, 영화 감상, 새로운 기술 블로그 탐방하기</p>
-        </div>
+        <!-- 차트 대시보드 영역 -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            <!-- 날짜별 매출액 선 그래프 -->
+            <div class="bg-white p-6 rounded-lg shadow-md">
+                <h2 class="text-xl font-bold text-gray-700 mb-4">날짜별 매출액 추이</h2>
+                <div class="relative h-96">
+                    <canvas id="lineChart"></canvas>
+                </div>
+            </div>
 
-        <!-- 링크 버튼 -->
-        <div class="links">
-            <a href="https://github.com" target="_blank" class="btn">GitHub</a>
-            <a href="https://velog.io" target="_blank" class="btn">Blog</a>
+            <!-- 매출액 분포 박스플롯 -->
+            <div class="bg-white p-6 rounded-lg shadow-md">
+                <h2 class="text-xl font-bold text-gray-700 mb-4">매출 분포 (Boxplot)</h2>
+                <div class="relative h-96">
+                    <canvas id="boxChart"></canvas>
+                </div>
+            </div>
         </div>
     </div>
+
+    <script>
+        // 1. 설정값: 깃허브 저장소에 업로드할 CSV 파일 경로
+        // 로컬 개발 시에는 'data.csv'를 직접 참조하고, 배포 시에는 아래와 같이 상대경로로 작동합니다.
+        const CSV_URL = 'data.csv'; 
+
+        let globalData = [];
+        let lineChartInstance = null;
+        let boxChartInstance = null;
+
+        // 페이지 로드 시 실행
+        window.onload = function() {
+            fetchData();
+        };
+
+        // CSV 데이터 가져오기
+        function fetchData() {
+            Papa.parse(CSV_URL, {
+                download: true,
+                header: true,
+                dynamicTyping: true,
+                complete: function(results) {
+                    globalData = results.data.filter(row => row.Branch && row.Date);
+                    initDashboard();
+                },
+                error: function(err) {
+                    alert('데이터 로드 실패: 깃허브 저장소에 data.csv가 정상 업로드되었는지 확인하세요.');
+                    console.error(err);
+                }
+            });
+        }
+
+        // 대시보드 초기화
+        function initDashboard() {
+            const branches = [...new Set(globalData.map(item => item.Branch))];
+            const selectEl = document.getElementById('branchSelect');
+            
+            // 드롭다운 옵션 추가
+            branches.forEach(branch => {
+                const option = document.createElement('option');
+                option.value = branch;
+                option.textContent = branch;
+                selectEl.appendChild(option);
+            });
+
+            // 셀렉트 변경 이벤트 리스너 등록
+            selectEl.addEventListener('change', (e) => {
+                renderCharts(e.target.value);
+            });
+
+            // 첫 번째 지점으로 기본 렌더링
+            if (branches.length > 0) {
+                renderCharts(branches[0]);
+            }
+        }
+
+        // 차트 렌더링 함수
+        function renderCharts(selectedBranch) {
+            // 해당 지점 데이터 필터링 및 정렬
+            const filtered = globalData.filter(item => item.Branch === selectedBranch);
+            
+            // Day 숫자를 기준으로 정렬 (Day 1, Day 2 ...)
+            filtered.sort((a, b) => {
+                const numA = parseInt(a.Date.match(/\d+/)[0]);
+                const numB = parseInt(b.Date.match(/\d+/)[0]);
+                return numA - numB;
+            });
+
+            const labels = filtered.map(item => item.Date);
+            const sales = filtered.map(item => item.Sales);
+
+            // 1. [좌측] Line Chart 그리기
+            if (lineChartInstance) lineChartInstance.destroy();
+            const ctxLine = document.getElementById('lineChart').getContext('2d');
+            lineChartInstance = new Chart(ctxLine, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: `${selectedBranch} 일자별 매출`,
+                        data: sales,
+                        borderColor: '#3b82f6',
+                        backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                        borderWidth: 3,
+                        tension: 0.1,
+                        fill: true,
+                        pointBackgroundColor: '#3b82f6',
+                        pointRadius: 5
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: { beginAtZero: true }
+                    }
+                }
+            });
+
+            // 2. [우측] Boxplot 그리기 (chartjs-chart-boxplot 라이브러리 사용)
+            if (boxChartInstance) boxChartInstance.destroy();
+            const ctxBox = document.getElementById('boxChart').getContext('2d');
+            boxChartInstance = new Chart(ctxBox, {
+                type: 'boxplot',
+                data: {
+                    labels: [selectedBranch],
+                    datasets: [{
+                        label: '매출 분포 Range',
+                        backgroundColor: 'rgba(74, 222, 128, 0.5)',
+                        borderColor: '#22c55e',
+                        borderWidth: 2,
+                        outlierColor: '#ef4444',
+                        data: [sales]  // 배열 안에 원본 매출 숫자 리스트 전달
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false }
+                    }
+                }
+            });
+        }
+    </script>
 </body>
 </html>
+"""
+
+with open("index.html", "w", encoding="utf-8") as f:
+    f.write(html_content)
+
+print("웹 페이지 소스코드인 'index.html' 생성이 완료되었습니다.")
